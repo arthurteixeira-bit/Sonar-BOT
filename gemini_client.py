@@ -18,25 +18,21 @@ def configure(api_key: str):
     """Configura a API key do Gemini. Chamar uma vez na inicialização."""
     global _model
     genai.configure(api_key=api_key)
-    _model = genai.GenerativeModel("gemini-2.0-flash")
+    _model = genai.GenerativeModel("gemini-3.8-flash")
 
 
 def extract_from_audio(audio_path: str, mime_type: str = "audio/ogg") -> dict:
     """
     Recebe path de arquivo de áudio, manda pro Gemini, retorna dict estruturado.
     O Gemini transcreve E extrai os campos num passo só.
+    Envia bytes inline (evita File API que rejeita certos formatos de chave).
     """
-    audio_file = genai.upload_file(path=audio_path, mime_type=mime_type)
-    try:
-        response = _model.generate_content([audio_file, _build_prompt()])
-        return _parse_response(response.text)
-    finally:
-        # Limpa arquivo do Gemini (não deixa acumular)
-        try:
-            genai.delete_file(audio_file.name)
-        except Exception:
-            pass
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
 
+    audio_part = {"mime_type": mime_type, "data": audio_bytes}
+    response = _model.generate_content([audio_part, _build_prompt()])
+    return _parse_response(response.text)
 
 def extract_from_text(text: str) -> dict:
     """
