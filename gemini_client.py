@@ -31,7 +31,7 @@ def extract_from_audio(audio_path: str, mime_type: str = "audio/ogg") -> dict:
         audio_bytes = f.read()
 
     audio_part = {"mime_type": mime_type, "data": audio_bytes}
-    response = _model.generate_content([audio_part, _build_prompt()])
+        response = _model.generate_content([audio_part, _build_prompt()], request_options={"timeout": 120})
     return _parse_response(response.text)
 
 def extract_from_text(text: str) -> dict:
