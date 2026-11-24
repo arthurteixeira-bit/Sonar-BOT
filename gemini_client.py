@@ -39,7 +39,7 @@ def extract_from_text(text: str) -> dict:
     Recebe texto do parceiro, manda pro Gemini, retorna dict estruturado.
     """
     prompt = f"{_build_prompt()}\n\nTexto do parceiro:\n{text}"
-    response = _model.generate_content(prompt)
+      response = _model.generate_content(prompt, request_options={"timeout": 120})
     return _parse_response(response.text)
 
 
