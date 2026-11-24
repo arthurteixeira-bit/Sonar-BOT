@@ -50,7 +50,7 @@ async def webhook(request: Request):
 
     data = await request.json()
     update = Update.de_json(data, tg_app.bot)
-    await tg_app.process_update(update)
+       asyncio.create_task(tg_app.process_update(update))
     return PlainTextResponse("OK")
 
 
