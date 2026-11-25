@@ -1,9 +1,10 @@
 """
 Integração com Gemini API — transcreve áudio E extrai dados num passo só.
-Usa o free tier do Google AI Studio (15 req/min, 1500 req/dia).
+Usa o free tier do Google AI Studio (5 req/min no gemini-3.8-flash).
 """
 import json
 import logging
+import time
 from datetime import datetime
 
 import google.generativeai as genai
@@ -13,12 +14,49 @@ logger = logging.getLogger(__name__)
 # Model global — inicializado em configure()
 _model = None
 
+# Controle de rate limit simples (free tier = 5 req/min)
+_last_request_time = 0
+_MIN_INTERVAL = 12  # segundos entre requests (5 req/min = 1 a cada 12s)
+
 
 def configure(api_key: str):
     """Configura a API key do Gemini. Chamar uma vez na inicialização."""
     global _model
     genai.configure(api_key=api_key)
     _model = genai.GenerativeModel("gemini-3.8-flash")
+
+
+def _rate_limit():
+    """Espera se necessário pra não estourar o rate limit."""
+    global _last_request_time
+    now = time.time()
+    elapsed = now - _last_request_time
+    if elapsed < _MIN_INTERVAL:
+        wait = _MIN_INTERVAL - elapsed
+        logger.info(f"Rate limit: aguardando {wait:.1f}s")
+        time.sleep(wait)
+    _last_request_time = time.time()
+
+
+def _generate_with_retry(content, max_retries=2):
+    """Chama generate_content com retry em caso de rate limit."""
+    for attempt in range(max_retries + 1):
+        try:
+            _rate_limit()
+            response = _model.generate_content(
+                content,
+                request_options={"timeout": 120},
+            )
+            return response
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str and attempt < max_retries:
+                wait = 15 * (attempt + 1)
+                logger.warning(f"Rate limit 429, tentativa {attempt+1}, aguardando {wait}s")
+                time.sleep(wait)
+            else:
+                raise
+    raise RuntimeError("Max retries exceeded")
 
 
 def extract_from_audio(audio_path: str, mime_type: str = "audio/ogg") -> dict:
@@ -31,15 +69,16 @@ def extract_from_audio(audio_path: str, mime_type: str = "audio/ogg") -> dict:
         audio_bytes = f.read()
 
     audio_part = {"mime_type": mime_type, "data": audio_bytes}
-        response = _model.generate_content([audio_part, _build_prompt()], request_options={"timeout": 120})
+    response = _generate_with_retry([audio_part, _build_prompt()])
     return _parse_response(response.text)
+
 
 def extract_from_text(text: str) -> dict:
     """
     Recebe texto do parceiro, manda pro Gemini, retorna dict estruturado.
     """
     prompt = f"{_build_prompt()}\n\nTexto do parceiro:\n{text}"
-      response = _model.generate_content(prompt, request_options={"timeout": 120})
+    response = _generate_with_retry(prompt)
     return _parse_response(response.text)
 
 
