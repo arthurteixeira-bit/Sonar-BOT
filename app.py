@@ -50,7 +50,9 @@ async def webhook(request: Request):
 
     data = await request.json()
     update = Update.de_json(data, tg_app.bot)
-       asyncio.create_task(tg_app.process_update(update))
+    # Processa em background pra responder 200 rápido ao Telegram
+    # (evita retries e mensagens duplicadas)
+    asyncio.create_task(tg_app.process_update(update))
     return PlainTextResponse("OK")
 
 
